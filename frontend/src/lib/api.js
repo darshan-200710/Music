@@ -22,3 +22,10 @@ export function spotifySearchUrl(title, artist) {
   const q = encodeURIComponent(`${title} ${artist}`);
   return `https://open.spotify.com/search/${q}`;
 }
+
+export async function getSpotifyPreview(title, artist, index = 0) {
+  const res = await axios.get(`${API}/spotify/preview`, {
+    params: { title, artist, index }
+  });
+  return res.data;
+}
