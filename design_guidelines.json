@@ -1,0 +1,102 @@
+{
+  "theme": "LIGHT",
+  "archetype": "3 (Pastel & Soft) with Neo-Brutalist contrast",
+  "design_philosophy": "Optimistic, light, and tactile workspace for content creators. Uses generous spacing, hard black borders, and pastel accents to feel like a modern, trendy Gen Z tool, avoiding standard SaaS sterility.",
+  "colors": {
+    "background": "#FDFBF7",
+    "surface": "#FFFFFF",
+    "primary": "#0A0A0A",
+    "primary_foreground": "#FFFFFF",
+    "accent_lavender": "#E6D8F8",
+    "accent_mint": "#D1F2E3",
+    "accent_peach": "#FFDCC2",
+    "accent_yellow": "#FEF0A5",
+    "text_primary": "#0A0A0A",
+    "text_secondary": "#4A4A4A",
+    "border": "#0A0A0A"
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Cabinet Grotesk, sans-serif",
+      "style": "tracking-tight, bold to black weights",
+      "sizes": {
+        "h1": "text-4xl sm:text-5xl lg:text-6xl",
+        "h2": "text-2xl sm:text-3xl lg:text-4xl",
+        "h3": "text-xl sm:text-2xl"
+      }
+    },
+    "body": {
+      "font_family": "Satoshi, sans-serif",
+      "style": "leading-relaxed",
+      "sizes": {
+        "base": "text-base",
+        "small": "text-sm",
+        "label": "uppercase text-xs tracking-[0.2em]"
+      }
+    }
+  },
+  "surfaces": {
+    "cards": "bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-xl transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]",
+    "upload_zone": "bg-[#FDFBF7] border-2 border-dashed border-black rounded-2xl hover:bg-[#D1F2E3] transition-colors cursor-pointer p-12",
+    "tags": "px-3 py-1 border border-black rounded-full text-xs font-bold uppercase tracking-wider"
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Generous spacing: p-6, p-8, p-12, p-16",
+    "grid_system": "Dashboard Control Room layout once media is uploaded: grid-cols-1 lg:grid-cols-12 gap-8",
+    "structure": {
+      "hero_empty": "col-span-full flex flex-col items-center justify-center min-h-[60vh] text-center",
+      "workspace_left": "col-span-1 lg:col-span-5 flex flex-col gap-6",
+      "workspace_right": "col-span-1 lg:col-span-7 flex flex-col gap-6"
+    }
+  },
+  "components": {
+    "button": "bg-black text-white px-6 py-3 rounded-full font-bold uppercase tracking-wide hover:bg-black/80 transition-all active:scale-95",
+    "button_outline": "bg-white text-black border-2 border-black px-6 py-3 rounded-full font-bold uppercase tracking-wide hover:bg-black hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none",
+    "song_card": "flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] gap-4",
+    "music_icon_button": "w-10 h-10 rounded-full border border-black flex items-center justify-center hover:bg-[#FFDCC2] transition-colors",
+    "loader": "flex flex-col items-center justify-center p-12 text-black animate-pulse font-bold font-heading text-2xl tracking-tighter"
+  },
+  "motion_and_interactions": {
+    "hover_states": "Hard shadow expansion, slight upward translation (-translate-y-1)",
+    "page_transitions": "Framer Motion staggered fade-in for lists",
+    "loading": "Use a bold kinetic text loader instead of a generic spinner. E.g., 'ANALYZING VIBES...'"
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage": "Bold, 2px stroke width, un-filled."
+  },
+  "media": {
+    "images": [
+      {
+        "category": "hero_background",
+        "url": "https://images.pexels.com/photos/20818852/pexels-photo-20818852.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Abstract pastel gradient art with soft waves, used sparingly as an overlay or background accent."
+      },
+      {
+        "category": "example_upload_media_1",
+        "url": "https://images.pexels.com/photos/31185754/pexels-photo-31185754.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Golden sunset at a seaside café in Istanbul, used as a placeholder/example of media a user might upload."
+      },
+      {
+        "category": "example_upload_media_2",
+        "url": "https://images.unsplash.com/photo-1712628024421-938f485f6e87?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODF8MHwxfHNlYXJjaHwxfHxhZXN0aGV0aWMlMjBjYWZlJTIwc3Vuc2V0JTIwbGlmZXN0eWxlfGVufDB8fHx8MTc4MDc2NTIxNnww&ixlib=rb-4.1.0&q=85",
+        "description": "Aesthetic cafe room, used as another placeholder for uploaded media."
+      }
+    ]
+  },
+  "accessibility": {
+    "contrast": "Black text on pastel backgrounds ensures WCAG AAA contrast.",
+    "focus_states": "focus:ring-4 focus:ring-black focus:outline-none",
+    "data_testid": "All interactive elements must have data-testid."
+  },
+  "instructions_to_main_agent": [
+    "Build a single-page workspace application using React and Tailwind CSS.",
+    "Avoid Shadcn defaults; customize UI components with the Neo-Brutalist styling (border-2, hard shadow) mentioned in 'surfaces'.",
+    "Implement the 'Upload Zone' prominently. Upon upload and analysis, split the view into Media Preview & Analysis on the left, and Song Recommendations on the right.",
+    "Do not use generic spinners. Use a bold text loader during AI analysis.",
+    "Include 'data-testid' on all buttons and actionable items.",
+    "For the 'Search on Spotify' button, use a simple <a> tag opening a search query on Spotify.",
+    "Store history in sessionStorage so the user can see recent uploads.",
+    "Integrate Lucide React for iconography."
+  ]
+}
