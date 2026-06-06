@@ -9,6 +9,8 @@ import base64
 import uuid
 import tempfile
 import io
+import asyncio
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -43,6 +45,8 @@ except Exception as e:
     client = None
     HAS_DB = False
 
+memory_db = []
+
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
 ENABLE_MOCK_ANALYSIS = os.environ.get('ENABLE_MOCK_ANALYSIS', '').lower() in {'1', 'true', 'yes'}
@@ -62,6 +66,9 @@ class SongSuggestion(BaseModel):
     vibe: str
     why: str
     usage_hint: str
+    preview_url: Optional[str] = None
+    spotify_url: Optional[str] = None
+    album_art: Optional[str] = None
 
 
 class AnalysisResult(BaseModel):
@@ -75,6 +82,8 @@ class AnalysisResult(BaseModel):
     songs: List[SongSuggestion]
     thumbnail_base64: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    instagram_caption: Optional[str] = None
+    hashtags: List[str] = Field(default_factory=list)
 
 
 # ============ Media Processing ============
@@ -145,6 +154,8 @@ You MUST respond ONLY with a valid JSON object, no markdown, no code fences, no 
   "colors": ["dominant color description 1", "color 2", "color 3"],
   "scene_description": "1-2 sentence vivid description of what's in the media",
   "aesthetic": "the overall aesthetic style (e.g., golden hour, minimalist, vibrant urban, soft pastel, moody cinematic)",
+  "instagram_caption": "A highly engaging, creative Instagram caption matching the visual vibe (using emojis and a natural, catchy tone)",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"],
   "songs": [
     {
       "title": "Song Title",
@@ -242,6 +253,8 @@ def _get_mock_analysis() -> Dict[str, Any]:
         "colors": colors[:3],
         "scene_description": "A visually compelling composition with strong aesthetic appeal",
         "aesthetic": aesthetics[2],
+        "instagram_caption": "Lost in the rhythm of the city. ✨ Let the vibes take over.",
+        "hashtags": ["vibematch", "instavibes", "musiclover", "aesthetic", "moodygram"],
         "songs": songs
     }
 
@@ -288,6 +301,110 @@ async def _analyze_with_llm(image_bytes: bytes, media_type: str) -> Dict[str, An
             + _gemini_error(e)
         ) from e
 
+
+# ============ Spotify Integration & Fallbacks ============
+SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET")
+
+spotify_token_cache = {
+    "token": None,
+    "expires_at": 0
+}
+
+FALLBACK_PREVIEWS = [
+    {
+        "preview_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+        "album_art": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400&auto=format&fit=crop"
+    },
+    {
+        "preview_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+        "album_art": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop"
+    },
+    {
+        "preview_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+        "album_art": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&auto=format&fit=crop"
+    },
+    {
+        "preview_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+        "album_art": "https://images.unsplash.com/photo-1507838153414-b4b713384a76?q=80&w=400&auto=format&fit=crop"
+    },
+    {
+        "preview_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+        "album_art": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop"
+    },
+    {
+        "preview_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+        "album_art": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=400&auto=format&fit=crop"
+    }
+]
+
+async def _get_spotify_token() -> Optional[str]:
+    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+        return None
+    
+    import time
+    now = time.time()
+    if spotify_token_cache["token"] and spotify_token_cache["expires_at"] > now + 60:
+        return spotify_token_cache["token"]
+        
+    url = "https://accounts.spotify.com/api/token"
+    auth_bytes = f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode("utf-8")
+    auth_header = base64.b64encode(auth_bytes).decode("utf-8")
+    headers = {
+        "Authorization": f"Basic {auth_header}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = {"grant_type": "client_credentials"}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, headers=headers, data=data)
+            if resp.status_code == 200:
+                body = resp.json()
+                spotify_token_cache["token"] = body["access_token"]
+                spotify_token_cache["expires_at"] = now + body["expires_in"]
+                return body["access_token"]
+            else:
+                logger.warning(f"Spotify token request failed: {resp.status_code} {resp.text}")
+    except Exception as e:
+        logger.warning(f"Error getting Spotify token: {e}")
+    return None
+
+async def _enrich_song_with_spotify(song: SongSuggestion, token: str) -> SongSuggestion:
+    # Query Spotify
+    query = f"track:{song.title} artist:{song.artist}"
+    url = "https://api.spotify.com/v1/search"
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {"q": query, "type": "track", "limit": 1}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code == 200:
+                tracks = resp.json().get("tracks", {}).get("items", [])
+                if tracks:
+                    track = tracks[0]
+                    song.preview_url = track.get("preview_url")
+                    song.spotify_url = track.get("external_urls", {}).get("spotify")
+                    album_images = track.get("album", {}).get("images", [])
+                    if album_images:
+                        song.album_art = album_images[0].get("url")
+            else:
+                logger.warning(f"Spotify search failed: {resp.status_code} {resp.text}")
+    except Exception as e:
+        logger.warning(f"Error searching Spotify: {e}")
+    return song
+
+def _enrich_song_with_fallback(song: SongSuggestion, index: int) -> SongSuggestion:
+    fallback = FALLBACK_PREVIEWS[index % len(FALLBACK_PREVIEWS)]
+    if not song.preview_url:
+        song.preview_url = fallback["preview_url"]
+    if not song.album_art:
+        song.album_art = fallback["album_art"]
+    if not song.spotify_url:
+        song.spotify_url = f"https://open.spotify.com/search/{song.title.replace(' ', '%20')}%20{song.artist.replace(' ', '%20')}"
+    return song
+
 # ============ Routes ============
 @api_router.get("/")
 async def root():
@@ -333,6 +450,19 @@ async def analyze_media(file: UploadFile = File(...)):
         raise HTTPException(status_code=502, detail=f"Analysis failed: {e}")
 
     songs = [SongSuggestion(**s) for s in parsed.get("songs", [])]
+    
+    # Enrich songs with Spotify previews & artwork, or fallbacks
+    try:
+        token = await _get_spotify_token()
+        if token:
+            tasks = [_enrich_song_with_spotify(song, token) for song in songs]
+            songs = await asyncio.gather(*tasks)
+    except Exception as e:
+        logger.warning(f"Error enriching songs with Spotify: {e}")
+        
+    for i, song in enumerate(songs):
+        _enrich_song_with_fallback(song, i)
+
     thumb_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
     result = AnalysisResult(
@@ -344,6 +474,8 @@ async def analyze_media(file: UploadFile = File(...)):
         aesthetic=parsed.get("aesthetic", ""),
         songs=songs,
         thumbnail_base64=f"data:image/jpeg;base64,{thumb_b64}",
+        instagram_caption=parsed.get("instagram_caption", "Vibe matched! ✨"),
+        hashtags=parsed.get("hashtags", []),
     )
 
     doc = result.model_dump()
@@ -351,36 +483,64 @@ async def analyze_media(file: UploadFile = File(...)):
         try:
             await db.analyses.insert_one(doc)
         except Exception as e:
-            logger.warning(f"Failed to save to database: {e}")
+            logger.warning(f"Failed to save to database: {e}. Falling back to in-memory storage.")
+            memory_db.insert(0, doc)
+    else:
+        memory_db.insert(0, doc)
     return result
+
+
+@api_router.get("/spotify/preview")
+async def get_spotify_preview(title: str, artist: str, index: int = 0):
+    dummy_song = SongSuggestion(title=title, artist=artist, vibe="", why="", usage_hint="")
+    token = await _get_spotify_token()
+    if token:
+        dummy_song = await _enrich_song_with_spotify(dummy_song, token)
+    
+    # Apply fallback
+    dummy_song = _enrich_song_with_fallback(dummy_song, index)
+    return {
+        "preview_url": dummy_song.preview_url,
+        "spotify_url": dummy_song.spotify_url,
+        "album_art": dummy_song.album_art
+    }
 
 
 @api_router.get("/history", response_model=List[AnalysisResult])
 async def get_history(limit: int = 12):
     if not HAS_DB:
-        return []
+        return memory_db[:limit]
     try:
         docs = await db.analyses.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
         return docs
     except Exception as e:
-        logger.warning(f"Failed to fetch history: {e}")
-        return []
+        logger.warning(f"Failed to fetch history: {e}. Falling back to in-memory history.")
+        return memory_db[:limit]
 
 
 @api_router.get("/analysis/{analysis_id}", response_model=AnalysisResult)
 async def get_analysis(analysis_id: str):
     if not HAS_DB:
+        for doc in memory_db:
+            if doc.get("id") == analysis_id:
+                return doc
         raise HTTPException(status_code=404, detail="Analysis not found")
     try:
         doc = await db.analyses.find_one({"id": analysis_id}, {"_id": 0})
         if not doc:
+            for m_doc in memory_db:
+                if m_doc.get("id") == analysis_id:
+                    return m_doc
             raise HTTPException(status_code=404, detail="Analysis not found")
         return doc
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning(f"Failed to fetch analysis: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch analysis")
+        logger.warning(f"Failed to fetch analysis: {e}. Searching in-memory fallback.")
+        for m_doc in memory_db:
+            if m_doc.get("id") == analysis_id:
+                return m_doc
+        raise HTTPException(status_code=404, detail="Analysis not found")
 
 
 app.include_router(api_router)

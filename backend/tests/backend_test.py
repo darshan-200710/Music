@@ -7,10 +7,15 @@ import pytest
 import requests
 from PIL import Image, ImageDraw
 
+from pathlib import Path
+
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://vibe-match-126.preview.emergentagent.com').rstrip('/')
 # Allow override via frontend .env at runtime
 try:
-    with open('/app/frontend/.env') as f:
+    env_path = Path(__file__).parents[2] / 'frontend' / '.env'
+    if not env_path.exists():
+        env_path = Path('/app/frontend/.env')
+    with open(env_path) as f:
         for line in f:
             if line.startswith('REACT_APP_BACKEND_URL='):
                 BASE_URL = line.split('=', 1)[1].strip().rstrip('/')
@@ -113,6 +118,8 @@ def _assert_analysis_shape(data, media_type):
         assert s['title'] and s['artist'] and s['vibe'] and s['why'] and s['usage_hint']
     assert data['thumbnail_base64'].startswith('data:image/')
     assert 'id' in data and isinstance(data['id'], str)
+    assert 'instagram_caption' in data
+    assert isinstance(data['hashtags'], list)
 
 
 def test_analyze_image(photo_bytes):
